@@ -25,8 +25,7 @@
 (function () {
   'use strict';
 
-  // TODO: fill in after registering the app at https://developer.spotify.com/dashboard
-  const CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID';
+  const CLIENT_ID = 'cdc1bd4a9f8745e1b5848a538cdc0c03';
 
   // Must exactly match a Redirect URI registered on the Spotify app (including
   // trailing slash / no trailing slash — Spotify matches this literally).
