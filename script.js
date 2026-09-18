@@ -7,25 +7,32 @@
  * page needs to exist on a real https:// origin, since Spotify requires a
  * registered https redirect URI).
  *
+ * Client ID is NOT hardcoded here: each customer registers their own
+ * Spotify app (Development Mode's ~5-user cap is a non-issue when only
+ * that one customer ever uses their own app) and the configurator passes
+ * their Client ID in as ?client_id=... when it opens this page. That's
+ * fine to pass around in the open — a Client ID isn't a secret, PKCE
+ * exists specifically so public clients never need one.
+ *
  * Flow:
- *   1. Configurator opens this page in a popup.
- *   2. No ?code= yet -> user clicks "Connect", we generate a PKCE verifier/
- *      challenge, stash the verifier in sessionStorage, and redirect to
- *      Spotify's authorize screen.
+ *   1. Configurator opens this page as a popup:
+ *      spoconnect/?client_id=<their Client ID>
+ *   2. No ?code= yet -> user clicks "Connect". We generate a PKCE
+ *      verifier/challenge, stash both the verifier AND the client_id in
+ *      sessionStorage (Spotify's redirect back strips our original query
+ *      params and replaces them with its own ?code=..., so anything we
+ *      need after the round trip has to survive some other way), and
+ *      redirect to Spotify's authorize screen.
  *   3. Spotify redirects back here with ?code=... . We read the verifier
- *      back out of sessionStorage (same origin/tab, so it survived the round
- *      trip) and exchange the code for tokens directly against Spotify's
- *      token endpoint (CORS-enabled for PKCE clients — no backend needed).
+ *      and client_id back out of sessionStorage (same origin/tab, so they
+ *      survived the round trip) and exchange the code for tokens directly
+ *      against Spotify's token endpoint (CORS-enabled for PKCE clients —
+ *      no backend needed).
  *   4. We hand the tokens back to the window that opened us via
  *      postMessage and close ourselves.
- *
- * CLIENT_ID is not a secret (Spotify's PKCE flow is designed for public
- * clients) — it's fine for it to sit in this public repo/page.
  */
 (function () {
   'use strict';
-
-  const CLIENT_ID = 'cdc1bd4a9f8745e1b5848a538cdc0c03';
 
   // Must exactly match a Redirect URI registered on the Spotify app (including
   // trailing slash / no trailing slash — Spotify matches this literally).
@@ -55,13 +62,14 @@
     return btoa(str).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
   }
 
-  async function startAuth() {
+  async function startAuth(clientId) {
     const verifier = generateRandomString(64);
     sessionStorage.setItem('spotify_pkce_verifier', verifier);
+    sessionStorage.setItem('spotify_client_id', clientId);
     const challenge = base64UrlEncode(await sha256(verifier));
 
     const params = new URLSearchParams({
-      client_id: CLIENT_ID,
+      client_id: clientId,
       response_type: 'code',
       redirect_uri: REDIRECT_URI,
       scope: SCOPES,
@@ -73,8 +81,12 @@
 
   async function exchangeCode(code) {
     const verifier = sessionStorage.getItem('spotify_pkce_verifier');
+    const clientId = sessionStorage.getItem('spotify_client_id');
+    if (!clientId) {
+      throw new Error('Lost track of which Spotify app this was for — please try connecting again from the widget setup page.');
+    }
     const body = new URLSearchParams({
-      client_id: CLIENT_ID,
+      client_id: clientId,
       grant_type: 'authorization_code',
       code: code,
       redirect_uri: REDIRECT_URI,
@@ -93,11 +105,6 @@
   }
 
   async function init() {
-    if (CLIENT_ID === 'YOUR_SPOTIFY_CLIENT_ID') {
-      statusEl.textContent = 'This connect page is not configured yet (missing Spotify Client ID).';
-      return;
-    }
-
     const params = new URLSearchParams(location.search);
     const code = params.get('code');
     const error = params.get('error');
@@ -127,10 +134,17 @@
       return;
     }
 
-    // Fresh load, no code yet: offer the connect button.
+    // Fresh load, no code yet: this page must have been opened with the
+    // customer's own Spotify Client ID.
+    const clientId = params.get('client_id');
+    if (!clientId) {
+      statusEl.textContent = 'Missing Spotify Client ID — open this page from the widget setup page, not directly.';
+      return;
+    }
+
     statusEl.textContent = 'Click below to sign in with Spotify and allow read-only access to your currently playing track.';
     connectBtn.hidden = false;
-    connectBtn.addEventListener('click', startAuth);
+    connectBtn.addEventListener('click', () => startAuth(clientId));
   }
 
   init();
