@@ -1,47 +1,16 @@
-/*
- * Spotify OAuth (Authorization Code + PKCE) relay page.
- *
- * Fully client-side, no server/secret involved. Meant to be opened as a
- * popup from the widget's configurator (which may be running locally, e.g.
- * from a file:// path or a customer's own machine — that's exactly why this
- * page needs to exist on a real https:// origin, since Spotify requires a
- * registered https redirect URI).
- *
- * Client ID is NOT hardcoded here: each customer registers their own
- * Spotify app (Development Mode's ~5-user cap is a non-issue when only
- * that one customer ever uses their own app) and the configurator passes
- * their Client ID in as ?client_id=... when it opens this page. That's
- * fine to pass around in the open — a Client ID isn't a secret, PKCE
- * exists specifically so public clients never need one.
- *
- * Flow:
- *   1. Configurator opens this page as a popup:
- *      spoconnect/?client_id=<their Client ID>
- *   2. No ?code= yet -> user clicks "Connect". We generate a PKCE
- *      verifier/challenge, stash both the verifier AND the client_id in
- *      sessionStorage (Spotify's redirect back strips our original query
- *      params and replaces them with its own ?code=..., so anything we
- *      need after the round trip has to survive some other way), and
- *      redirect to Spotify's authorize screen.
- *   3. Spotify redirects back here with ?code=... . We read the verifier
- *      and client_id back out of sessionStorage (same origin/tab, so they
- *      survived the round trip) and exchange the code for tokens directly
- *      against Spotify's token endpoint (CORS-enabled for PKCE clients —
- *      no backend needed).
- *   4. We hand the tokens back to the window that opened us via
- *      postMessage and close ourselves.
- */
 (function () {
   'use strict';
 
-  // Must exactly match a Redirect URI registered on the Spotify app (including
-  // trailing slash / no trailing slash — Spotify matches this literally).
   const REDIRECT_URI = location.origin + location.pathname;
-
   const SCOPES = 'user-read-currently-playing user-read-playback-state';
 
   const statusEl = document.getElementById('status');
+  const clientIdField = document.getElementById('clientIdField');
+  const clientIdInput = document.getElementById('clientIdInput');
   const connectBtn = document.getElementById('connectBtn');
+  const resultEl = document.getElementById('result');
+  const resultClientId = document.getElementById('resultClientId');
+  const resultRefreshToken = document.getElementById('resultRefreshToken');
 
   function generateRandomString(length) {
     const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -83,7 +52,7 @@
     const verifier = sessionStorage.getItem('spotify_pkce_verifier');
     const clientId = sessionStorage.getItem('spotify_client_id');
     if (!clientId) {
-      throw new Error('Lost track of which Spotify app this was for — please try connecting again from the widget setup page.');
+      throw new Error('Lost track of which Spotify app this was for — please try connecting again.');
     }
     const body = new URLSearchParams({
       client_id: clientId,
@@ -101,8 +70,31 @@
       const text = await res.text();
       throw new Error('Token exchange failed (' + res.status + '): ' + text);
     }
-    return res.json(); // { access_token, refresh_token, expires_in, ... }
+    const tokens = await res.json();
+    return { tokens, clientId };
   }
+
+  function showResult(clientId, refreshToken) {
+    clientIdField.hidden = true;
+    connectBtn.hidden = true;
+    resultClientId.value = clientId;
+    resultRefreshToken.value = refreshToken || '';
+    resultEl.hidden = false;
+  }
+
+  document.addEventListener('click', (e) => {
+    const key = e.target && e.target.dataset && e.target.dataset.copy;
+    if (!key) return;
+    const input = document.getElementById(key);
+    if (!input) return;
+    input.select();
+    navigator.clipboard && navigator.clipboard.writeText(input.value).catch(() => {
+      document.execCommand('copy');
+    });
+    const original = e.target.textContent;
+    e.target.textContent = 'Copied!';
+    setTimeout(() => { e.target.textContent = original; }, 1200);
+  });
 
   async function init() {
     const params = new URLSearchParams(location.search);
@@ -116,15 +108,14 @@
 
     if (code) {
       statusEl.textContent = 'Finishing connection…';
+      clientIdField.hidden = true;
       try {
-        const tokens = await exchangeCode(code);
+        const { tokens, clientId } = await exchangeCode(code);
         if (window.opener) {
           window.opener.postMessage({ type: 'spotify-auth-success', tokens: tokens }, '*');
-          statusEl.textContent = 'Connected! You can close this window.';
-          setTimeout(() => window.close(), 800);
-        } else {
-          statusEl.textContent = 'Connected — go back to the widget setup tab and click Connect again to finish.';
         }
+        statusEl.textContent = 'Connected!';
+        showResult(clientId, tokens.refresh_token);
       } catch (e) {
         statusEl.textContent = 'Something went wrong finishing the connection. ' + e.message;
         if (window.opener) {
@@ -134,17 +125,20 @@
       return;
     }
 
-    // Fresh load, no code yet: this page must have been opened with the
-    // customer's own Spotify Client ID.
-    const clientId = params.get('client_id');
-    if (!clientId) {
-      statusEl.textContent = 'Missing Spotify Client ID — open this page from the widget setup page, not directly.';
-      return;
-    }
+    const prefillClientId = params.get('client_id');
+    if (prefillClientId) clientIdInput.value = prefillClientId;
 
-    statusEl.textContent = 'Click below to sign in with Spotify and allow read-only access to your currently playing track.';
     connectBtn.hidden = false;
-    connectBtn.addEventListener('click', () => startAuth(clientId));
+    connectBtn.disabled = !clientIdInput.value.trim();
+    clientIdInput.addEventListener('input', () => {
+      connectBtn.disabled = !clientIdInput.value.trim();
+    });
+
+    connectBtn.addEventListener('click', () => {
+      const clientId = clientIdInput.value.trim();
+      if (!clientId) return;
+      startAuth(clientId);
+    });
   }
 
   init();
