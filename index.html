@@ -10,8 +10,26 @@
   <div class="card">
     <div class="logo">●</div>
     <h1>Connect Spotify</h1>
-    <p id="status">This page connects your widget setup to your Spotify account.</p>
+    <p id="status">Paste your Spotify app's Client ID below, then connect. You'll get a Client ID and Refresh Token to paste into your widget.</p>
+
+    <div class="field" id="clientIdField">
+      <input type="text" id="clientIdInput" placeholder="Spotify Client ID">
+    </div>
     <button id="connectBtn" hidden>Connect to Spotify</button>
+
+    <div class="result" id="result" hidden>
+      <label>Spotify Client ID</label>
+      <div class="row">
+        <input type="text" id="resultClientId" readonly>
+        <button class="copy-btn" data-copy="resultClientId">Copy</button>
+      </div>
+      <label>Spotify Refresh Token</label>
+      <div class="row">
+        <input type="text" id="resultRefreshToken" readonly>
+        <button class="copy-btn" data-copy="resultRefreshToken">Copy</button>
+      </div>
+      <p class="hint">Paste both of these into your widget's own Spotify Client ID / Refresh Token fields.</p>
+    </div>
   </div>
   <script src="script.js"></script>
 </body>

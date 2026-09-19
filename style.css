@@ -58,3 +58,60 @@ button {
 }
 
 button:active { transform: translateY(1px); }
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field input[type="text"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0f1115;
+  color: #f2f3f5;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.result {
+  margin-top: 18px;
+  text-align: left;
+}
+
+.result label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.85;
+  margin: 12px 0 6px;
+}
+
+.result .row {
+  display: flex;
+  gap: 8px;
+}
+
+.result input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0f1115;
+  color: #f2f3f5;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.copy-btn {
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+.result .hint {
+  font-size: 11px;
+  opacity: 0.6;
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
